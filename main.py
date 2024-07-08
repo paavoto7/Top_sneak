@@ -3,58 +3,58 @@ import pygame
 import csv
 import math
 from collections import deque
+from os import listdir
 
 FPS = 60
 SCREEN_BOTTOM = 800
 SCREEN_WIDTH = 896
 
-bullet_image = []
+images = {}
 
-def load_image():
-    bullet_image.append(pygame.transform.scale_by(pygame.image.load("./bullet.png").convert_alpha(), 0.04))
+def image_loader():
+    for imagename in listdir("./assets/"):
+        images[imagename[0:-4]] = pygame.image.load(f"./assets/{imagename}").convert_alpha()
 
 colours = {0: (0,0,0,0), 1: (211,211,211), 2: (80,80,80)}
 
-
-def map_loader():
-    with open("map3.csv", "r") as map:
-        csv_reader = csv.reader(map)
-        return list(csv_reader)
+guns = {
+    "pistol": [30, 30, 500, 2, False], #[power, mag size, firerate in ms, spread, is automatic]
+    "auto_rifle": [75, 50, 100, 5, True],
+    "shotgun": [50, 30, 1000, 10, False],
+    "sniper": [100, 5, 1500, 0.5, False]
+}
 
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, tile_width, walls, *groups):
         super().__init__(*groups)
-        self.image = pygame.transform.scale_by(pygame.image.load("./ninja.png").convert_alpha(), 0.2)
-        self.rect = self.image.get_rect(center=(100, 150))
-        self.move_rect = self.image.get_rect(center=(100, 150))
+        self.image = pygame.transform.scale_by(images["ninja"], 0.2)
+        self.rect = self.image.get_rect(center=(5*tile_width, 60))
+        self.move_rect = self.image.get_rect(center=self.rect.center)
         self.mask = pygame.mask.from_surface(self.image)
-        self.vel = tile_width // 3
+        self.vel = tile_width // 2
         self.dirx = 0
         self.diry = 0
         self.walls = walls
+        self.gun = Gun("auto_rifle")
 
     def move(self, pressed):
         self.velocity_x, self.velocity_y = 0, 0
         self.diry = 0
         self.dirx = 0
         if pressed[pygame.K_w] or pressed[pygame.K_UP]:
-            #self.rect.move_ip(0, -self.vel)
             self.velocity_y -= self.vel
             self.diry = -1
             
         elif pressed[pygame.K_s] or pressed[pygame.K_DOWN]:
-            #self.rect.move_ip(0, self.vel)
             self.velocity_y += self.vel
             self.diry = 1
             
         if pressed[pygame.K_a] or pressed[pygame.K_LEFT]:
-            #self.rect.move_ip(-self.vel, 0)
             self.velocity_x -= self.vel
             self.dirx = -1
             
         elif pressed[pygame.K_d] or pressed[pygame.K_RIGHT]:
-            #self.rect.move_ip(self.vel, 0)
             self.velocity_x += self.vel
             self.dirx = 1
             
@@ -79,7 +79,7 @@ class Player(pygame.sprite.Sprite):
     def shoot(self):
         mouse_pos = pygame.mouse.get_pos() - pygame.Vector2(self.rect.center)
         angle = math.degrees(math.atan2(mouse_pos[1], mouse_pos[0]))
-        Projectile(self.rect.center, angle, bullets)
+        self.gun.fire(self.rect.center, angle)
         
     def update(self):
         x = self.move(pygame.key.get_pressed())
@@ -92,8 +92,7 @@ class Player(pygame.sprite.Sprite):
 class NPC(pygame.sprite.Sprite):
     def __init__(self, walls, tiles, map, *groups) -> None:
         super().__init__(*groups)
-        #self.image = pygame.transform.scale_by(pygame.image.load("./agent.png").convert_alpha(), 0.1)
-        self.image = pygame.transform.scale(pygame.image.load("./agent.png").convert_alpha(), tiles)
+        self.image = pygame.transform.scale(images["agent"], tiles)
         self.rect = self.image.get_rect(center=(500, 500))
         self.walls = walls
         self.direction = [random.choice([-1, 0, 1]), random.choice([-1, 0, 1])]
@@ -108,7 +107,7 @@ class NPC(pygame.sprite.Sprite):
     
     def update(self, player):
         if not self.is_hunting:
-            self.seek(player)
+            self.scan(player)
             self.rect.x += self.direction[0]
             self.rect.y += self.direction[1]
             self.collides()
@@ -130,7 +129,7 @@ class NPC(pygame.sprite.Sprite):
                 self.direction = [random.uniform(-self.direction[0], 3), random.uniform(-self.direction[1], 3)]
             
     
-    def seek(self, player: Player):
+    def scan(self, player: Player):
         direction = (player.rect.centerx - self.rect.centerx), (player.rect.centery - self.rect.centery)
         dist = math.dist(self.rect.center, player.rect.center)
         speed = player.vel - 2
@@ -175,20 +174,17 @@ class NPC(pygame.sprite.Sprite):
         playerpos = int(player.rect.centerx // self.tiles[0]), int(player.rect.centery // self.tiles[1])
 
         directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        """pol = int(self.sign(playerpos[0]-selfpos[0])), int(self.sign(playerpos[1]-selfpos[1]))
-        directions = [(pol[0], 0), (0, pol[1])]"""
+        
         queue = deque([selfpos])
         visited = deque()
         while queue:
             x, y = queue.popleft()
             if (x, y) == playerpos:
-                #lista = [self.map[x][y] for y, x in visited]
                 self.path = visited
                 return
             closest = []
             for dx, dy in directions:
                 new_x, new_y = x + dx, y + dy
-                #print(new_x, new_y, is_valid(new_x, new_y))
                 if is_valid(new_x, new_y) and (new_x, new_y) not in visited:
                     closest.append((new_x, new_y, is_closer(new_x, new_y)))
             if len(closest) != 0:
@@ -208,21 +204,54 @@ class NPC(pygame.sprite.Sprite):
             self.direction = [random.uniform(-self.direction[0], 3), random.uniform(-self.direction[1], 3)]
             return
         self.hunt_time -= 1
-        #print(path)
-        curpos = int(self.rect.centerx // self.tiles[0]), int(self.rect.centery // self.tiles[1])
+
+        curpos = self.rect.centerx / self.tiles[0], self.rect.centery / self.tiles[1]
         newcoord = self.path.popleft()
-        #self.rect.x += newcoord[0] - curpos[0]
-        #self.rect.y += newcoord[1] - curpos[1]
+
         self.direction = [newcoord[0] - curpos[0], newcoord[1] - curpos[1]]
 
 
+class Gun():
+    def __init__(self, name):
+        self.image = pygame.transform.scale_by(images["revolver"], 0.1)
+        self.name = name
+        stats = guns[name]
+        self.power = stats[0]
+        self.mag_size = stats[1]
+        self.fire_rate = stats[2] # per second
+        self.spread = stats[3]
+        self.is_auto = stats[4]
+        self.was_fired = False
+        self.is_shooting = False
+        self.last_shot = - self.fire_rate
+    
+    def fire(self, center, angle):
+        time_now = pygame.time.get_ticks()
+        if self.is_shooting and time_now - self.last_shot > self.fire_rate:
+            self.last_shot = time_now
+
+            new_angle = angle + random.uniform(-self.spread, self.spread)
+            if self.is_auto:
+                Projectile(center, self.power, new_angle, bullets)
+
+            elif self.was_fired == False:
+                self.was_fired = True
+                if self.name == "shotgun":
+                    angle = angle - self.spread
+                    for _ in range(5):
+                        angle = angle + self.spread // 5
+                        Projectile(center, self.power, angle, bullets)
+                else:
+                    Projectile(center, self.power, new_angle, bullets)
+        
+
 class Projectile(pygame.sprite.Sprite):
-    def __init__(self, position, angle, *groups):
+    def __init__(self, position, vel, angle, *groups):
         super().__init__(*groups)
-        self.image = bullet_image[0]
+        self.image = pygame.transform.scale_by(images["bullet"], 0.04)
         self.image = pygame.transform.rotate(self.image, -angle)
         self.rect = self.image.get_rect(center=position)
-        self.velocity = 10
+        self.velocity = vel
         self.angle = angle
     
     def update(self):
@@ -233,10 +262,15 @@ class Projectile(pygame.sprite.Sprite):
 
 class Map:
     def __init__(self, screen: pygame.surface.Surface) -> None:
-        self.map = map_loader()
+        self.map = self.load()
         self.surface = pygame.surface.Surface((screen.get_width(), screen.get_height()))
         self.surface.fill("black")
         self.rect = self.surface.get_rect()
+    
+    def load(self):
+        with open("map3.csv", "r") as map:
+            csv_reader = csv.reader(map)
+            return list(csv_reader)
 
 
 class Wall(pygame.sprite.Sprite):
@@ -258,7 +292,7 @@ def main():
     screen = pygame.display.set_mode(screen_size, pygame.SCALED)
     clock = pygame.time.Clock()
     map = Map(screen)
-    load_image()
+    image_loader()
 
     TILE_WIDTH = SCREEN_WIDTH / len(map.map[0])
     TILE_HEIGHT = SCREEN_BOTTOM / len(map.map)
@@ -271,7 +305,6 @@ def main():
 
     player = Player(TILE_WIDTH, walls, player_group)
     agent = NPC(walls, (TILE_WIDTH, TILE_HEIGHT), map.map, agents)
-    #Projectile(90, bullets)
 
     for i, row in enumerate(map.map):
         for j, tile in enumerate(row):
@@ -289,10 +322,14 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-            if event.type == pygame.MOUSEBUTTONUP:
+            if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
-                    player.shoot()
-        
+                    player.gun.is_shooting = True
+            elif event.type == pygame.MOUSEBUTTONUP:
+                player.gun.is_shooting = False
+                player.gun.was_fired = False
+
+        player.shoot()
         screen.fill("black")
 
         screen.blit(map.surface, map.rect)
