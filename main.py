@@ -8,6 +8,11 @@ FPS = 60
 SCREEN_BOTTOM = 800
 SCREEN_WIDTH = 896
 
+bullet_image = []
+
+def load_image():
+    bullet_image.append(pygame.transform.scale_by(pygame.image.load("./bullet.png").convert_alpha(), 0.04))
+
 colours = {0: (0,0,0,0), 1: (211,211,211), 2: (80,80,80)}
 
 
@@ -71,6 +76,11 @@ class Player(pygame.sprite.Sprite):
         if pygame.sprite.spritecollideany(self, self.walls):
             return True
     
+    def shoot(self):
+        mouse_pos = pygame.mouse.get_pos() - pygame.Vector2(self.rect.center)
+        angle = math.degrees(math.atan2(mouse_pos[1], mouse_pos[0]))
+        Projectile(self.rect.center, angle, bullets)
+        
     def update(self):
         x = self.move(pygame.key.get_pressed())
         self.rect = self.move_rect
@@ -204,19 +214,29 @@ class NPC(pygame.sprite.Sprite):
         #self.rect.x += newcoord[0] - curpos[0]
         #self.rect.y += newcoord[1] - curpos[1]
         self.direction = [newcoord[0] - curpos[0], newcoord[1] - curpos[1]]
-        
-        """for tile in path:
-            new_x = tile[0]-curpos[0]
-            new_y = tile[1]-curpos[1]
-            
-            curpos = (self.rect.x,
-            self.rect.y)"""
-        #self.is_hunting = False
+
+
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, position, angle, *groups):
+        super().__init__(*groups)
+        self.image = bullet_image[0]
+        self.image = pygame.transform.rotate(self.image, -angle)
+        self.rect = self.image.get_rect(center=position)
+        self.velocity = 10
+        self.angle = angle
+    
+    def update(self):
+        x = (math.cos(math.radians(self.angle)) * self.velocity, math.sin(math.radians(self.angle)) * self.velocity)
+        self.rect.x += x[0]
+        self.rect.y += x[1]
 
 
 class Map:
-    def __init__(self) -> None:
+    def __init__(self, screen: pygame.surface.Surface) -> None:
         self.map = map_loader()
+        self.surface = pygame.surface.Surface((screen.get_width(), screen.get_height()))
+        self.surface.fill("black")
+        self.rect = self.surface.get_rect()
 
 
 class Wall(pygame.sprite.Sprite):
@@ -230,13 +250,15 @@ class Floor(pygame.sprite.Sprite):
         super().__init__(*groups)
         self.rect = pygame.rect.Rect(*bounds)
 
+bullets = pygame.sprite.Group()
 
 def main():
     pygame.init()
     screen_size = (SCREEN_WIDTH, SCREEN_BOTTOM)
     screen = pygame.display.set_mode(screen_size, pygame.SCALED)
     clock = pygame.time.Clock()
-    map = Map()
+    map = Map(screen)
+    load_image()
 
     TILE_WIDTH = SCREEN_WIDTH / len(map.map[0])
     TILE_HEIGHT = SCREEN_BOTTOM / len(map.map)
@@ -249,9 +271,11 @@ def main():
 
     player = Player(TILE_WIDTH, walls, player_group)
     agent = NPC(walls, (TILE_WIDTH, TILE_HEIGHT), map.map, agents)
+    #Projectile(90, bullets)
 
     for i, row in enumerate(map.map):
         for j, tile in enumerate(row):
+            pygame.draw.rect(map.surface, colours[int(tile)], (j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT))
             if tile == "1":
                 Floor((j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT), floors)
             elif tile == "2":
@@ -265,22 +289,31 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+            if event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    player.shoot()
         
         screen.fill("black")
 
-        for i, row in enumerate(map.map):
-            for j, tile in enumerate(row):
-                #print(i, j)
-                pygame.draw.rect(screen, colours[int(tile)], (j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT))
+        screen.blit(map.surface, map.rect)
         
-        for ray in agent.rays:
-            pygame.draw.line(screen, "white", agent.rect.center, ray)
+        for bullet in bullets.sprites():
+            if pygame.sprite.spritecollideany(bullet, walls):
+                bullet.kill()
+        
+        for enemy in agents.sprites():
+            for ray in enemy.rays:
+                pygame.draw.line(screen, "white", agent.rect.center, ray)
+            if pygame.sprite.spritecollideany(enemy, bullets):
+                enemy.kill()
         
         player.update()
         agents.update(player)
+        bullets.update()
         screen.blit(player.image, player.rect)
-        screen.blit(agent.image, agent.rect)
-        #agents.draw(screen)
+        #screen.blit(agent.image, agent.rect)
+        agents.draw(screen)
+        bullets.draw(screen)
         
 
         pygame.display.flip()
