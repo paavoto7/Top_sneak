@@ -5,6 +5,8 @@ import math
 from collections import deque
 from os import listdir
 
+from menu import menu
+
 FPS = 60
 SCREEN_BOTTOM = 800
 SCREEN_WIDTH = 896
@@ -15,10 +17,11 @@ def image_loader():
     for imagename in listdir("./assets/"):
         images[imagename[0:-4]] = pygame.image.load(f"./assets/{imagename}").convert_alpha()
 
-colours = {0: (0,0,0,0), 1: (211,211,211), 2: (80,80,80)}
+colours = {0: (0,0,0), 1: (211,211,211), 2: (80,80,80), 9:(200,0,0)}
 
 guns = {
-    "pistol": [30, 30, 500, 2, False], #[power, mag size, firerate in ms, spread, is automatic]
+    #   [power, mag size, firerate in ms, spread, is automatic]
+    "pistol": [30, 30, 500, 2, False],
     "auto_rifle": [75, 50, 100, 5, True],
     "shotgun": [50, 30, 1000, 10, False],
     "sniper": [100, 5, 1500, 0.5, False]
@@ -30,63 +33,53 @@ class Player(pygame.sprite.Sprite):
         super().__init__(*groups)
         self.image = pygame.transform.scale_by(images["ninja"], 0.2)
         self.rect = self.image.get_rect(center=(5*tile_width, 60))
-        self.move_rect = self.image.get_rect(center=self.rect.center)
         self.mask = pygame.mask.from_surface(self.image)
-        self.vel = tile_width // 2
-        self.dirx = 0
-        self.diry = 0
-        self.walls = walls
+        self.vel = tile_width // 2 # Move the player half tile
+        self.walls = walls # Wall sprites (could be global)
         self.gun = Gun("auto_rifle")
 
     def move(self, pressed):
+        # Calculate players velocity based on key presses
         self.velocity_x, self.velocity_y = 0, 0
-        self.diry = 0
-        self.dirx = 0
         if pressed[pygame.K_w] or pressed[pygame.K_UP]:
             self.velocity_y -= self.vel
-            self.diry = -1
             
         elif pressed[pygame.K_s] or pressed[pygame.K_DOWN]:
             self.velocity_y += self.vel
-            self.diry = 1
             
         if pressed[pygame.K_a] or pressed[pygame.K_LEFT]:
             self.velocity_x -= self.vel
-            self.dirx = -1
             
         elif pressed[pygame.K_d] or pressed[pygame.K_RIGHT]:
             self.velocity_x += self.vel
-            self.dirx = 1
-            
         
+        # Normalize diagonal movement
         if self.velocity_x != 0 and self.velocity_y != 0:
             self.velocity_y /= math.sqrt(2)
             self.velocity_x /= math.sqrt(2)
         
-        self.move_rect.y += self.velocity_y
-        
+        # Update the temporary rect and check collisions
+        self.rect.y += self.velocity_y      
         if self.collides():
-            self.move_rect.y -= self.velocity_y
+            self.rect.y -= self.velocity_y
             
-        self.move_rect.x += self.velocity_x
+        self.rect.x += self.velocity_x
         if self.collides():
-            self.move_rect.x -= self.velocity_x
+            self.rect.x -= self.velocity_x
             
     def collides(self):
+        # Check for collision with any of the walls
         if pygame.sprite.spritecollideany(self, self.walls):
             return True
     
     def shoot(self):
+        # Call fire and calculate shooting angle based on mouse position
         mouse_pos = pygame.mouse.get_pos() - pygame.Vector2(self.rect.center)
         angle = math.degrees(math.atan2(mouse_pos[1], mouse_pos[0]))
         self.gun.fire(self.rect.center, angle)
         
     def update(self):
-        x = self.move(pygame.key.get_pressed())
-        self.rect = self.move_rect
-
-    def push_back(self):
-        self.rect.move_ip(-self.dirx, -self.diry)
+        self.move(pygame.key.get_pressed())
 
 
 class NPC(pygame.sprite.Sprite):
@@ -106,46 +99,76 @@ class NPC(pygame.sprite.Sprite):
         self.hunt_time = 0
     
     def update(self, player):
+        """Update player position based on whether hunting is on.
+        Takes player as argument for scan method.
+        """
         if not self.is_hunting:
             self.scan(player)
             self.rect.x += self.direction[0]
             self.rect.y += self.direction[1]
             self.collides()
-            self.calc_rays()
             #self.in_vision = False
         else:
             self.find_path(player)
             self.hunt()
             self.rect.x += self.direction[0]
             self.rect.y += self.direction[1]
-            self.calc_rays()
+        self.calc_rays()
 
 
     def collides(self):
-        if pygame.sprite.spritecollideany(self, self.walls):
+        # Check for collision and update position accordingly
+        if pygame.sprite.spritecollideany(self, self.walls) or pygame.sprite.spritecollideany(self, goals):
             self.rect.x -= self.direction[0]
             self.rect.y -= self.direction[1]
-            if not self.in_vision:
+            if not self.in_vision: # Set new direction if player not seen
                 self.direction = [random.uniform(-self.direction[0], 3), random.uniform(-self.direction[1], 3)]
+
             
     
     def scan(self, player: Player):
+        """Scan for the player in the vision cone.
+        """
+        
+        def actual_distance(angle):
+            # Calculates the actual distance between the angles
+            # angle - 360*math.floor((angle + 180) * (1/360))
+            return (angle + 180) % 360 - 180
+        
+        # Calculate direction vector from enemy to player
         direction = (player.rect.centerx - self.rect.centerx), (player.rect.centery - self.rect.centery)
+
+        # Calculate angle between enemy and the player
+        angle = math.degrees(math.atan2(-direction[1], direction[0]))
+        
+        # Calculate angle of enemy's current direction
+        direction_angle = math.degrees(math.atan2(-self.direction[1], self.direction[0]))
+        #print(direction_angle- angle, angular_distance_degrees(direction_angle- angle))
+        
         dist = math.dist(self.rect.center, player.rect.center)
         speed = player.vel - 2
-        angle = math.degrees(math.atan2(-direction[1], direction[0]))
 
-        direction_angle = -math.degrees(math.atan2(self.direction[1], self.direction[0]))
+        # Check for player in vision cone
+        #if dist < 250 and direction_angle - 40 <= angle <= direction_angle + 40:
+        if dist < 250 and - 40 < actual_distance(direction_angle - angle) < 40:
+            self.direction = [
+                math.cos(math.radians(-angle*1.05)) * speed,
+                math.sin(math.radians(-angle*1.05)) * speed
+                ]
+            self.in_vision = True
 
-        if dist < 250 and direction_angle - 80 <= angle <= direction_angle + 80:
-            self.direction = [math.cos(math.radians(-angle*1.05)) * speed, math.sin(math.radians(-angle*1.05)) * speed]
+        # Check for player in immediate vicinity
+        elif dist < 5:
+            self.direction = [
+                math.cos(math.radians(-angle)) * speed,
+                math.sin(math.radians(-angle)) * speed
+                ]
             self.in_vision = True
-        elif dist < 40:
-            self.direction = [math.cos(math.radians(-angle)) * speed, math.sin(math.radians(-angle)) * speed]
-            self.in_vision = True
+
+        # Start hunting the player
         elif self.in_vision == True:
             self.is_hunting = True
-            self.hunt_time = 200000
+            self.hunt_time = 250
             self.in_vision = False
         else:
             self.in_vision = False
@@ -279,12 +302,26 @@ class Wall(pygame.sprite.Sprite):
         self.rect = pygame.rect.Rect(*bounds)
 
 
-class Floor(pygame.sprite.Sprite):
+class Goal(pygame.sprite.Sprite):
     def __init__(self, bounds, *groups):
         super().__init__(*groups)
         self.rect = pygame.rect.Rect(*bounds)
 
+
+def reset_game(player: Player, agents: pygame.sprite.Group, tile_width):
+    player.rect.center = (5*tile_width, 60)
+    for agent in agents.sprites():
+        agent.rect.center = (500, 500)
+        agent.direction = [random.choice([-1, 0, 1]), random.choice([-1, 0, 1])]
+        agent.rays = []
+        agent.in_vision = False
+        agent.is_hunting = False
+        agent.path = []
+        agent.hunt_time = 0
+
+
 bullets = pygame.sprite.Group()
+goals = pygame.sprite.Group()
 
 def main():
     pygame.init()
@@ -301,7 +338,7 @@ def main():
     player_group = pygame.sprite.GroupSingle()
     agents = pygame.sprite.Group()
     walls = pygame.sprite.Group()
-    floors = pygame.sprite.Group()
+    
 
     player = Player(TILE_WIDTH, walls, player_group)
     agent = NPC(walls, (TILE_WIDTH, TILE_HEIGHT), map.map, agents)
@@ -309,12 +346,13 @@ def main():
     for i, row in enumerate(map.map):
         for j, tile in enumerate(row):
             pygame.draw.rect(map.surface, colours[int(tile)], (j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT))
-            if tile == "1":
-                Floor((j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT), floors)
+            if tile == "9":
+                Goal((j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT), goals)
             elif tile == "2":
                 Wall((j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT), walls)
 
     running = True
+    pause = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -322,6 +360,8 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_SPACE:
+                    pause = True
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     player.gun.is_shooting = True
@@ -329,7 +369,11 @@ def main():
                 player.gun.is_shooting = False
                 player.gun.was_fired = False
 
+        if pause:
+            pause = menu(screen, clock, FPS, images["menu_bg"])
+
         player.shoot()
+        
         screen.fill("black")
 
         screen.blit(map.surface, map.rect)
@@ -344,6 +388,10 @@ def main():
             if pygame.sprite.spritecollideany(enemy, bullets):
                 enemy.kill()
         
+        if pygame.sprite.spritecollideany(player, goals):
+            menu(screen, clock, FPS, images["menu_bg"], game_over=True)
+            reset_game(player, agents, TILE_WIDTH)
+        
         player.update()
         agents.update(player)
         bullets.update()
@@ -351,7 +399,6 @@ def main():
         #screen.blit(agent.image, agent.rect)
         agents.draw(screen)
         bullets.draw(screen)
-        
 
         pygame.display.flip()
         clock.tick(FPS)

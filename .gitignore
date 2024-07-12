@@ -1,4 +1,5 @@
 /env
+/__pycache__
 
 txt_to_csv.py
 
