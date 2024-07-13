@@ -2,6 +2,7 @@
 /__pycache__
 
 txt_to_csv.py
+bresenham.py
 
 *.png
 map.csv
