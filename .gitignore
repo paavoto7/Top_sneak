@@ -1,5 +1,5 @@
 /env
-/__pycache__
+*/__pycache__
 
 txt_to_csv.py
 bresenham.py

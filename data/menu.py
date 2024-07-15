@@ -15,11 +15,10 @@ class Button:
         return self.rect.collidepoint(coordinate)
 
 
-class MenuButton:
+class MenuButton(Button):
     def __init__(self, font_name, cont, pos, font_size=40, colour="black"):
         self.text = Text(font_name, cont, pos, font_size, colour)
-        self.button = Button(rect=self.text.tRect)
-        self.rect = self.button.rect
+        super().__init__(rect=self.text.tRect)
 
 
 class Text:
