@@ -3,7 +3,7 @@ import pygame
 import random
 import math
 
-from constants import images
+from .constants import images
 
 class NPC(pygame.sprite.Sprite):
     def __init__(self, walls, tiles, map, goals, obstacles, *groups) -> None:

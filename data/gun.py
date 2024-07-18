@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 
-from constants import guns, images
+from .constants import guns, images
 
 class Gun():
     def __init__(self, name, bullets):

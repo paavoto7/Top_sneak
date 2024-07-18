@@ -5,6 +5,7 @@ import pygame
 FPS = 60
 SCREEN_BOTTOM = 800
 SCREEN_WIDTH = 896
+SCREEN_CENTER = (SCREEN_WIDTH / 2, SCREEN_BOTTOM / 2)
 
 images = {}
 

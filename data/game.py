@@ -1,24 +1,18 @@
 import random
 import pygame
-from os import listdir
 
-from tile import Goal, Wall
-from player import Player
-from NPC import NPC
-from map import Map
-from menu import menu
+from .tile import Goal, Wall
+from .player import Player
+from .NPC import NPC
+from .map import Map
+from .menu import MainMenu
 
-from constants import SCREEN_WIDTH, SCREEN_BOTTOM, image_loader, FPS, images, colours
+from .constants import SCREEN_WIDTH, SCREEN_BOTTOM, FPS, images, colours
 
 class Game:
-    def __init__(self) -> None:
-        pygame.init()
-        self.screen_size = (SCREEN_WIDTH, SCREEN_BOTTOM)
-        self.screen = pygame.display.set_mode(self.screen_size, pygame.SCALED)
-        self.clock = pygame.time.Clock()
+    def __init__(self, screen) -> None:
+        self.screen = screen
         self.map = Map(self.screen)
-        image_loader()
-
         self.TILE_WIDTH = SCREEN_WIDTH / len(self.map.map[0])
         self.TILE_HEIGHT = SCREEN_BOTTOM / len(self.map.map)
         #print(TILE_HEIGHT, TILE_WIDTH, len(map.map[0]))
@@ -36,59 +30,58 @@ class Game:
         self.running = True
         self.pause = True
         self.add_tiles()
-    
-    def main(self):
-        while self.running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+
+        self.next_state = None
+        
+    def get_event(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
                     self.running = False
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        self.running = False
-                    elif event.key == pygame.K_SPACE:
-                        self.pause = True
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        self.player.gun.is_shooting = True
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    self.player.gun.is_shooting = False
-                    self.player.gun.was_fired = False
+                    self.next_state = "main menu"
+                elif event.key == pygame.K_SPACE:
+                    self.running = False
+                    self.next_state = "main menu"
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    self.player.gun.is_shooting = True
+            elif event.type == pygame.MOUSEBUTTONUP:
+                self.player.gun.is_shooting = False
+                self.player.gun.was_fired = False
 
-            if self.pause:
-                self.pause = menu(self.screen, self.clock, FPS, images["menu_bg"])
-
-            self.player.shoot()
-            
-            self.screen.fill("black")
-
-            self.screen.blit(self.map.surface, self.map.rect)
-            
-            for bullet in self.bullets.sprites():
-                if pygame.sprite.spritecollideany(bullet, self.walls):
-                    bullet.kill()
-            
-            for enemy in self.agents.sprites():
-                for ray in enemy.rays:
-                    pygame.draw.line(self.screen, "white", self.agent.rect.center, ray)
-                if pygame.sprite.spritecollideany(enemy, self.bullets):
-                    enemy.kill()
-            
-            if pygame.sprite.spritecollideany(self.player, self.goals):
-                menu(self.screen, self.clock, FPS, images["menu_bg"], game_over=True)
-                self.reset_game(self.player, self.agents, self.TILE_WIDTH)
-            
-            self.player.update()
-            self.agents.update(self.player)
-            self.bullets.update()
-            self.screen.blit(self.player.image, self.player.rect)
-            #self.screen.blit(agent.image, agent.rect)
-            self.agents.draw(self.screen)
-            self.bullets.draw(self.screen)
-
-            pygame.display.flip()
-            self.clock.tick(FPS)
+    def render(self):
     
-        pygame.quit()
+        if self.player.gun.is_shooting:
+            self.player.shoot()
+        
+        self.screen.fill("black")
+
+        self.screen.blit(self.map.surface, self.map.rect)
+        
+        for bullet in self.bullets.sprites():
+            if pygame.sprite.spritecollideany(bullet, self.walls):
+                bullet.kill()
+        
+        for enemy in self.agents.sprites():
+            for ray in enemy.rays:
+                pygame.draw.line(self.screen, "white", self.agent.rect.center, ray)
+            if pygame.sprite.spritecollideany(enemy, self.bullets):
+                enemy.kill()
+        
+        if pygame.sprite.spritecollideany(self.player, self.goals):
+            MainMenu(self.screen, self.clock, FPS, self, images["menu_bg"])
+            self.reset_game(self.player, self.agents, self.TILE_WIDTH)
+        
+        self.player.update()
+        self.agents.update(self.player)
+        self.bullets.update()
+        self.screen.blit(self.player.image, self.player.rect)
+        #self.screen.blit(agent.image, agent.rect)
+        self.agents.draw(self.screen)
+        self.bullets.draw(self.screen)
+
 
     def reset_game(player: Player, agents, tile_width):
         player.rect.center = (5*tile_width, 60)
@@ -111,8 +104,3 @@ class Game:
                     Wall((j * self.TILE_WIDTH, i * self.TILE_HEIGHT, self.TILE_WIDTH, self.TILE_HEIGHT), self.walls)
         
         self.obstacles.add(self.walls)
-
-
-if __name__ == "__main__":
-    game = Game()
-    game.main()

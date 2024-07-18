@@ -1,8 +1,8 @@
 import pygame
 import math
 
-from gun import Gun
-from constants import images
+from .gun import Gun
+from .constants import images
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, tile_width, walls, bullets, *groups):
