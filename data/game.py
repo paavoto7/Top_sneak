@@ -1,21 +1,23 @@
 import random
 import pygame
 
+from .gun import Gun
 from .tile import Goal, Wall
 from .player import Player
 from .NPC import NPC
-from .map import Map
-from .menu import MainMenu
+from .map import Level, Map
+from .menu import PauseMenu
 
-from .constants import SCREEN_WIDTH, SCREEN_BOTTOM, FPS, images, colours
+from .constants import SCREEN_WIDTH, SCREEN_BOTTOM, colours
 
 class Game:
     def __init__(self, screen) -> None:
         self.screen = screen
-        self.map = Map(self.screen)
+        self.level = Level(self.screen, 1)
+        self.map = self.level.map
         self.TILE_WIDTH = SCREEN_WIDTH / len(self.map.map[0])
         self.TILE_HEIGHT = SCREEN_BOTTOM / len(self.map.map)
-        #print(TILE_HEIGHT, TILE_WIDTH, len(map.map[0]))
+        #print(self.TILE_HEIGHT, self.TILE_WIDTH, len(self.map.map[0]))
 
         self.player_group = pygame.sprite.GroupSingle()
         self.agents = pygame.sprite.Group()
@@ -24,7 +26,7 @@ class Game:
         self.goals = pygame.sprite.Group()
         self.obstacles = pygame.sprite.Group()
 
-        self.player = Player(self.TILE_WIDTH, self.walls, self.bullets, self.player_group)
+        self.player = Player(self.level.player_position, self.TILE_WIDTH, self.walls, Gun(self.level.gun, self.bullets), self.player_group)
         self.agent = NPC(self.walls, (self.TILE_WIDTH, self.TILE_HEIGHT), self.map.map, self.goals, self.obstacles, self.agents)
 
         self.running = True
@@ -41,9 +43,10 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                     self.next_state = "main menu"
+                    self.reset_game()
                 elif event.key == pygame.K_SPACE:
                     self.running = False
-                    self.next_state = "main menu"
+                    self.next_state = "pause menu"
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     self.player.gun.is_shooting = True
@@ -71,8 +74,8 @@ class Game:
                 enemy.kill()
         
         if pygame.sprite.spritecollideany(self.player, self.goals):
-            MainMenu(self.screen, self.clock, FPS, self, images["menu_bg"])
-            self.reset_game(self.player, self.agents, self.TILE_WIDTH)
+            self.level.load(self.level.level_num + 1)
+            self.next_level()
         
         self.player.update()
         self.agents.update(self.player)
@@ -82,12 +85,15 @@ class Game:
         self.agents.draw(self.screen)
         self.bullets.draw(self.screen)
 
+    def next_level(self):
+        self.reset_game()
+        self.player.gun = Gun(self.level.gun, self.bullets)
 
-    def reset_game(player: Player, agents, tile_width):
-        player.rect.center = (5*tile_width, 60)
-        for agent in agents.sprites():
+    def reset_game(self):
+        self.player.rect.center = self.level.player_position
+        for agent in self.agents.sprites():
             agent.rect.center = (500, 500)
-            agent.direction = [random.choice([-1, 0, 1]), random.choice([-1, 0, 1])]
+            agent.direction.update(random.choice([-1, 0, 1]), random.choice([-1, 0, 1]))
             agent.rays = []
             agent.in_vision = False
             agent.is_hunting = False

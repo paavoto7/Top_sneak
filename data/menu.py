@@ -54,10 +54,13 @@ class Highlighted:
         self._current[0] = self.items[index]
         self._current[1] = self.items.index(self._current[0])
 
+    def reset(self):
+        self._current[0] = self.items[0]
+        self._current[1] = 0
+
 
 class Menu:
-    def __init__(self, game, screen, bg, buttons) -> None:
-        self.game = game
+    def __init__(self, screen, bg, buttons) -> None:
         self.screen = screen
         self.bg = bg
         #self.keys = {"up": False, "down": False, "esc": False, "enter": False}
@@ -92,6 +95,9 @@ class Menu:
     
     def execute_button(self):
         pass
+
+    def reset(self):
+        self.highlited.reset()
     
     def render(self):
         self.execute_button()
@@ -112,7 +118,7 @@ class Menu:
 class MainMenu(Menu):
     """Provides a menu to be used in a game.
     Game over argument decides whether to display start menu or not."""
-    def __init__(self, screen, controller, bg=None) -> None:
+    def __init__(self, screen, bg=None) -> None:
         
         self.center = SCREEN_CENTER
 
@@ -121,7 +127,7 @@ class MainMenu(Menu):
         self.settings = MenuButton("impact", "Settings", (self.center[0], self.center[1] + self.start.rect.height), colour="black")
         self.exit_menu = MenuButton("impact", "Exit game", (self.center[0], self.center[1] + self.start.rect.height*2), colour="black")
 
-        super().__init__(controller, screen, bg, [self.start, self.settings, self.exit_menu])
+        super().__init__(screen, bg, [self.start, self.settings, self.exit_menu])
         
         #self.button = Button(pygame.image.load("./assets/agent.png"), (center[0], center[1]))
     
@@ -137,14 +143,44 @@ class MainMenu(Menu):
 
 
 class SettingsMenu(Menu):
-    def __init__(self, game, screen, bg) -> None:
+    def __init__(self, screen, bg) -> None:
         self.center = SCREEN_CENTER
         self.start = MenuButton("impact", "Change brightness", self.center, colour="black")
         self.back = MenuButton("impact", "Go back", (self.center[0], self.center[1]+self.start.rect.height), colour="black")
-        super().__init__(game, screen, bg, [self.start, self.back])
+        super().__init__(screen, bg, [self.start, self.back])
     
     def execute_button(self):
         if self.action:
             match self.action:
                 case self.back:
                     self.next_state = "main menu"
+
+
+class PauseMenu(Menu):
+    def __init__(self, screen, reset_game, bg = None) -> None:
+        self.continue_btn = MenuButton("impact", "Continue", SCREEN_CENTER, colour="black")
+        self.exit_btn = MenuButton("impact", "Exit", (SCREEN_CENTER[0], SCREEN_CENTER[1]+self.continue_btn.rect.height), colour="black")
+        super().__init__(screen, bg, [self.continue_btn, self.exit_btn])
+        self.surface = pygame.surface.Surface((300, 300), pygame.SRCALPHA)
+        self.surface.fill((255,255,255,50))
+        self.rect = self.surface.get_rect(center=SCREEN_CENTER)
+        self.reset_game = reset_game
+
+    def render(self):
+        self.execute_button()
+        self.screen.blit(self.surface, self.rect)
+        for button in self.highlited.items:
+            self.screen.blit(button.text.text, button.rect)
+
+        self.screen.blit(self.highlited.surface, self.highlited.current.rect.topleft)
+    
+    def execute_button(self):
+        if self.action:
+            match self.action:
+                case self.continue_btn:
+                    self.next_state = "game"
+                case self.exit_btn:
+                    self.next_state = "main menu"
+                    self.reset_game()
+                    self.reset()
+        

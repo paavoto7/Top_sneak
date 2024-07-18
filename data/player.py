@@ -1,18 +1,17 @@
 import pygame
 import math
 
-from .gun import Gun
 from .constants import images
 
 class Player(pygame.sprite.Sprite):
-    def __init__(self, tile_width, walls, bullets, *groups):
+    def __init__(self, position, tile_width, walls, gun, *groups):
         super().__init__(*groups)
         self.image = pygame.transform.scale_by(images["ninja"], 0.2)
-        self.rect = self.image.get_rect(center=(5*tile_width, 60))
+        self.rect = self.image.get_rect(center=position)
         self.mask = pygame.mask.from_surface(self.image)
         self.vel = tile_width // 2 # Move the player half tile
         self.walls = walls # Wall sprites (could be global)
-        self.gun = Gun("auto_rifle", bullets)
+        self.gun = gun
 
     def move(self, pressed):
         # Calculate players velocity based on key presses

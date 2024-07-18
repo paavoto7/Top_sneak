@@ -1,0 +1,12 @@
+{
+    "level_1": {
+        "gun": "pistol",
+        "player_positionx": 70,
+        "player_positiony": 60
+    },
+    "level_2": {
+        "gun": "shotgun",
+        "player_positionx": 70,
+        "player_positiony": 60
+    }
+}
